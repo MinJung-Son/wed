@@ -44,16 +44,15 @@
 <body>
 
   <!-- ===================== 인트로 ===================== -->
-  <section id="intro" class="intro" aria-label="인트로">
-    <div class="intro__stage">
-      <p class="intro__title" id="intro-title-wrap">
+  <!-- 대표 사진 위에 글씨가 한 글자씩 나타나고, 이어서 날짜·예식장 정보가 나타납니다. -->
+  <section id="intro" class="intro scene" aria-label="인트로">
+    <div class="scene__media" id="intro-media"></div>
+    <div class="scene__text">
+      <p class="scene__title">
         <span class="sr-only" id="intro-title-sr"></span>
         <span id="intro-title" aria-hidden="true"></span>
       </p>
-      <figure class="intro__figure" id="intro-figure">
-        <div class="intro__img"><img id="intro-photo" alt=""></div>
-        <figcaption data-text="texts.headerTitle"></figcaption>
-      </figure>
+      <p class="scene__info" id="intro-info"></p>
     </div>
     <button type="button" class="intro__skip" id="intro-skip">건너뛰기</button>
   </section>
@@ -69,6 +68,15 @@
   </header>
 
   <main id="main">
+
+    <!-- 대표 사진(천천히 움직이는 모션 포토) + 글씨 + 날짜·예식장 -->
+    <section id="hero" class="hero scene" tabindex="-1" aria-label="대표 사진">
+      <div class="scene__media" id="hero-media"></div>
+      <div class="scene__text">
+        <h1 class="scene__title" id="hero-title"></h1>
+        <p class="scene__info" id="hero-info"></p>
+      </div>
+    </section>
 
     <!-- 초대의 말 -->
     <section id="invite" class="section section--invite" tabindex="-1" aria-label="초대의 말">
@@ -117,18 +125,36 @@
         <button type="button" class="btn" id="btn-map">지도 보기</button>
         <button type="button" class="btn" id="btn-directions">길찾기</button>
       </div>
+
+      <!-- 하객 안내: 유모차·휠체어, 식사·연회장, ATM (내용은 data.js 의 guide) -->
+      <div class="acc-list acc-list--spaced" id="guide-list"></div>
     </section>
 
     <!-- 오시는 길 -->
     <section id="location" class="section" tabindex="-1" aria-labelledby="h-location">
       <p class="eyebrow">LOCATION</p>
       <h2 class="section__title" id="h-location">오시는 길</h2>
-      <div class="acc-list" id="transport-list"></div>
-      <div class="btn-row btn-row--3">
-        <button type="button" class="btn" data-map="naver">네이버 지도</button>
-        <button type="button" class="btn" data-map="kakao">카카오맵</button>
-        <button type="button" class="btn" data-map="tmap">티맵</button>
+
+      <div class="loc">
+        <p class="loc__name" id="loc-name"></p>
+        <p class="loc__addr" id="loc-addr"></p>
       </div>
+
+      <!-- 네이버 지도 화면. 누르면 네이버지도 앱에서 예식장이 열려요. -->
+      <figure class="map" id="map-figure">
+        <button type="button" class="map__btn" id="map-open" aria-label="네이버지도 앱에서 예식장 열기">
+          <img id="map-img" alt="소노펠리체컨벤션 주변 지도" decoding="async" loading="lazy">
+        </button>
+      </figure>
+
+      <div class="btn-row btn-row--3 btn-row--tight">
+        <button type="button" class="btn" data-map="naver">네이버지도</button>
+        <button type="button" class="btn" data-map="tmap">티맵</button>
+        <button type="button" class="btn" data-map="kakao">카카오내비</button>
+      </div>
+      <p class="map__hint">버튼을 누르면 휴대폰의 지도 앱에서 예식장이 열려요.</p>
+
+      <div class="acc-list" id="transport-list"></div>
     </section>
 
     <!-- 우리의 가족 -->

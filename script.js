@@ -161,9 +161,51 @@ function init() {
   $('#d-date').textContent = dateInfo.long;
   $('#d-time').textContent = dateInfo.time;
   $('#d-venue').textContent = W.venue.name;
-  $('#d-hall').textContent = W.venue.hall;
+  $('#d-hall').textContent = [W.venue.hallName, W.venue.hall].filter(Boolean).join(' · ');
   $('#d-address').textContent = W.venue.address;
   $('#closing-date').textContent = dateInfo.short;
+  $('#loc-name').textContent = [W.venue.name, W.venue.hallName].filter(Boolean).join(' ');
+  $('#loc-addr').textContent = W.venue.address;
+
+  /* ---------- C-1b. 대표 사진 장면 (인트로 + 메인 맨 위) ---------- */
+  const sceneLines = [
+    `${dateInfo.long} ${dateInfo.time}`,
+    [W.venue.name, W.venue.hallName].filter(Boolean).join(' '),
+    W.venue.hall,
+  ].filter(Boolean);
+
+  function fillSceneInfo(node) {
+    node.textContent = '';
+    sceneLines.forEach((line) => node.appendChild(el('span', null, line)));
+  }
+  function buildSceneMedia(container, withVideo) {
+    container.style.setProperty('--focus', W.photos.heroFocus || '50% 40%');
+    const img = new Image();
+    img.alt = '';
+    img.decoding = 'async';
+    img.addEventListener('error', () => { container.classList.add('is-missing'); img.remove(); });
+    img.src = W.photos.intro;
+    container.appendChild(img);
+
+    // 선택: 짧은 영상(모션 포토). 재생되지 않으면 조용히 사진만 보여줍니다.
+    if (withVideo && W.photos.heroVideo && !reduceMotion) {
+      const v = document.createElement('video');
+      v.muted = true; v.defaultMuted = true; v.loop = true; v.autoplay = true; v.playsInline = true;
+      v.setAttribute('playsinline', ''); v.setAttribute('muted', ''); v.setAttribute('aria-hidden', 'true');
+      v.preload = 'metadata';
+      v.poster = W.photos.intro;
+      v.addEventListener('error', () => v.remove());
+      v.addEventListener('playing', () => { v.style.opacity = '1'; });
+      v.src = W.photos.heroVideo;
+      container.appendChild(v);
+      const p = v.play();
+      if (p && p.catch) p.catch(() => v.remove());
+    }
+  }
+
+  $('#hero-title').textContent = W.texts.introTitle;
+  fillSceneInfo($('#hero-info'));
+  buildSceneMedia($('#hero-media'), true);
 
   /* ---------- C-2. 스크롤 잠금 · 팝업(레이어) 관리 ---------- */
   let lockCount = 0;
@@ -467,24 +509,85 @@ function init() {
   /* ---------- C-8. 결혼식 안내 · 지도 ---------- */
   const searchKeyword = W.venue.searchKeyword || W.venue.name;
 
-  function mapUrl(app) {
-    const custom = (W.mapLinks && W.mapLinks[app]) || '';
-    if (custom) return custom;
-    if (app === 'kakao') return 'https://map.kakao.com/link/search/' + encodeURIComponent(searchKeyword);
-    return '';
+  /* 지도 앱 실행 방식
+     - 휴대폰: 네이버지도·티맵 앱을 직접 열어 예식장을 보여줍니다. (좌표가 있으면 도착지 길찾기)
+       안드로이드는 앱이 없으면 설치 화면으로, 열리지 않으면 주소를 복사해 드려요.
+     - 카카오: 카카오내비는 외부에서 여는 공식 방법이 없어 카카오맵(길찾기·내비 연결)을 엽니다.
+     - 컴퓨터: 네이버/티맵은 주소를 복사해 드리고, 카카오는 웹 지도를 엽니다. */
+  const uaText = navigator.userAgent || '';
+  const isAndroid = /Android/i.test(uaText);
+  const isIOS = /iPhone|iPad|iPod/i.test(uaText) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isMobile = isAndroid || isIOS;
+  const venueLat = parseFloat(W.venue.lat);
+  const venueLng = parseFloat(W.venue.lng);
+  const hasCoords = Number.isFinite(venueLat) && Number.isFinite(venueLng);
+  const qName = encodeURIComponent(searchKeyword);
+  const appLabel = { naver: '네이버지도', tmap: '티맵', kakao: '카카오맵' };
+
+  function appTarget(app) {
+    if (app === 'naver') {
+      const appname = encodeURIComponent(location.origin + location.pathname);
+      const pq = hasCoords
+        ? `route/car?dlat=${venueLat}&dlng=${venueLng}&dname=${qName}&appname=${appname}`
+        : `search?query=${qName}&appname=${appname}`;
+      return { scheme: 'nmap', pq, pkg: 'com.nhn.android.nmap' };
+    }
+    const pq = hasCoords
+      ? `route?goalname=${qName}&goalx=${venueLng}&goaly=${venueLat}`
+      : `search?name=${qName}`;
+    return { scheme: 'tmap', pq, pkg: 'com.skt.tmap.ku' };
   }
+  function kakaoUrl() {
+    return hasCoords
+      ? `https://map.kakao.com/link/to/${qName},${venueLat},${venueLng}`
+      : 'https://map.kakao.com/link/search/' + qName;
+  }
+
+  function launchApp(url, app, trigger) {
+    let left = false;
+    const mark = () => { left = true; };
+    const onVisibility = () => { if (document.hidden) left = true; };
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pagehide', mark);
+    window.addEventListener('blur', mark);
+    window.location.href = url;
+    setTimeout(() => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pagehide', mark);
+      window.removeEventListener('blur', mark);
+      if (!left && !document.hidden) {
+        copyWithToast(W.venue.address, `${appLabel[app]} 앱이 열리지 않아 주소를 복사했어요. 앱에서 붙여넣어 검색해 주세요.`, trigger);
+      }
+    }, 1800);
+  }
+
   function openMap(app, trigger) {
-    const url = mapUrl(app);
-    if (url) { window.open(url, '_blank', 'noopener'); return; }
-    // 확인된 링크가 아직 없으면 주소를 복사해 드려요. (앱이 없는 폰에서 오류 창이 뜨지 않도록 앱 호출은 하지 않습니다)
-    const appName = app === 'naver' ? '네이버 지도' : '티맵';
-    copyWithToast(W.venue.address, `주소를 복사했어요. ${appName}에서 붙여넣어 검색해 주세요.`, trigger);
+    const custom = (W.mapLinks && W.mapLinks[app]) || '';
+    if (custom) { window.open(custom, '_blank', 'noopener'); return; }
+    if (app === 'kakao') { window.open(kakaoUrl(), '_blank', 'noopener'); return; }
+    if (!isMobile) {
+      copyWithToast(W.venue.address, `주소를 복사했어요. ${appLabel[app]}에서 붙여넣어 검색해 주세요.`, trigger);
+      return;
+    }
+    const t = appTarget(app);
+    const url = isAndroid
+      ? `intent://${t.pq}#Intent;scheme=${t.scheme};action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;package=${t.pkg};end`
+      : `${t.scheme}://${t.pq}`;
+    launchApp(url, app, trigger);
   }
 
   $('#btn-copy-address').addEventListener('click', (e) => {
     copyWithToast(W.venue.address, '주소를 복사했어요.', e.currentTarget);
   });
-  $('#btn-map').addEventListener('click', (e) => openMap('kakao', e.currentTarget));
+  $('#btn-map').addEventListener('click', (e) => openMap('naver', e.currentTarget));
+  $('#map-open').addEventListener('click', (e) => openMap('naver', e.currentTarget));
+  (function renderMapImage() {
+    const fig = $('#map-figure');
+    const img = $('#map-img');
+    if (!W.venue.mapImage) { fig.hidden = true; return; }
+    img.addEventListener('error', () => { fig.hidden = true; });
+    img.src = W.venue.mapImage;
+  })();
   $('#btn-directions').addEventListener('click', () => {
     const custom = (W.mapLinks && W.mapLinks.directions) || '';
     if (custom) window.open(custom, '_blank', 'noopener');
@@ -492,9 +595,9 @@ function init() {
   });
   $$('[data-map]').forEach((btn) => btn.addEventListener('click', () => openMap(btn.dataset.map, btn)));
 
-  (function renderTransport() {
-    const list = $('#transport-list');
-    (W.transport.groups || []).forEach((g) => {
+  /* 접었다 펴는 안내 칸 (오시는 길 · 하객 안내 공통) */
+  function renderAccordion(list, groups) {
+    (groups || []).forEach((g) => {
       const d = el('details', 'acc');
       if (g.open) d.open = true;
       d.appendChild(el('summary', null, g.title));
@@ -506,7 +609,10 @@ function init() {
       d.appendChild(body);
       list.appendChild(d);
     });
-  })();
+  }
+  renderAccordion($('#transport-list'), W.transport && W.transport.groups);
+  renderAccordion($('#guide-list'), W.guide && W.guide.groups);
+  if (!$('#guide-list').children.length) $('#guide-list').hidden = true;
 
   /* ---------- C-9. 가족 · 계좌 팝업 ---------- */
   const infoModal = $('#modal-info');
@@ -529,14 +635,14 @@ function init() {
   function openAccounts(side, trigger) {
     infoTitle.textContent = side === 'groom' ? '신랑 측 계좌' : '신부 측 계좌';
     infoBody.textContent = '';
-    const list = (W.accounts[side] || []).filter((a) => a.bank && a.holder && a.number);
+    const list = (W.accounts[side] || []).filter((a) => a.bank && a.number);   // 예금주는 비어 있어도 됩니다
     if (!list.length) {
       infoBody.appendChild(el('p', 'info-empty', '계좌 정보는 준비 중입니다.'));
     }
     list.forEach((a) => {
       const box = el('div', 'account');
       if (a.label) box.appendChild(el('p', 'account__who', a.label));
-      box.appendChild(el('p', 'account__bank', `${a.bank} · ${a.holder}`));
+      box.appendChild(el('p', 'account__bank', a.holder ? `${a.bank} · ${a.holder}` : a.bank));
       box.appendChild(el('p', 'account__number', a.number));
       const copyBtn = el('button', 'btn', '계좌번호 복사');
       copyBtn.type = 'button';
@@ -714,8 +820,7 @@ function init() {
   function runIntro() {
     const intro = $('#intro');
     const titleEl = $('#intro-title');
-    const figure = $('#intro-figure');
-    const photo = $('#intro-photo');
+    const infoEl = $('#intro-info');
     const skipBtn = $('#intro-skip');
     const chars = splitGraphemes(W.texts.introTitle);
     const timers = [];
@@ -743,31 +848,32 @@ function init() {
     }
     skipBtn.addEventListener('click', finish);
 
+    // 장면 A·B: 대표 사진(천천히 움직임)이 처음부터 깔려 있고, 그 위에 글씨가 나타납니다.
     // 사진이 없거나 불러오지 못해도 인트로는 계속 진행됩니다.
-    photo.addEventListener('error', () => figure.classList.add('is-missing'));
-    photo.src = W.photos.intro;
+    buildSceneMedia($('#intro-media'), false);
+    fillSceneInfo(infoEl);
 
     later(finish, 9000); // 안전장치: 무슨 일이 있어도 9초 안에는 메인으로
 
-    function showPhoto() {
-      titleEl.parentElement.classList.add('is-hidden');
-      figure.classList.add('is-visible');
-      later(finish, 2100);
+    function showInfo() {
+      infoEl.classList.add('is-visible');
+      later(finish, 2200); // 장면 C: 잠시 보여준 뒤 메인(똑같은 모습의 대표 사진 화면)으로 자연스럽게 이어짐
     }
 
-    if (reduceMotion) { // 동작 줄이기: 글자는 한 번에, 사진은 바로, 짧게 보여주고 이동
+    if (reduceMotion) { // 동작 줄이기: 글씨와 정보를 한 번에 보여주고 짧게 머문 뒤 이동
       titleEl.textContent = chars.join('');
-      later(() => { showPhoto(); }, 900);
+      infoEl.classList.add('is-visible');
+      later(finish, 1800);
       return;
     }
 
-    // 장면 A: 한 글자씩 타이핑 → 장면 B: 사진 페이드인 → 장면 C: 메인으로 전환
+    // 한 글자씩 타이핑 → 날짜·예식장 정보 나타남 → 메인으로 전환
     let i = 0;
     function typeNext() {
       i += 1;
       titleEl.textContent = chars.slice(0, i).join('');
       if (i < chars.length) later(typeNext, 110);
-      else later(showPhoto, 500);
+      else later(showInfo, 500);
     }
     later(typeNext, 300);
   }
