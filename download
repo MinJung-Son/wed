@@ -1,0 +1,16 @@
+# 운영체제가 자동으로 만드는 파일
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 편집기 설정
+.vscode/
+.idea/
+
+# 작업 중 임시 파일
+*.tmp
+*.bak
+node_modules/
+
+# 원본 사진 보관용 폴더 (용량이 크니 GitHub 에 올리지 않아요)
+images-original/
